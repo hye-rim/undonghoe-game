@@ -34,6 +34,7 @@ function createSort(rng = Math.random) {
     time: SORT.TIME, score: 0, combo: 0, maxCombo: 0, correct: 0, wrong: 0,
     gauge: 0, fever: 0, stun: 0, swapped: false, swapWarn: 0, nextSwapAt: 0,
     queue: [], flying: [], popups: [], shake: 0, stageN: 1, stageBanner: 0, over: false,
+    press: [0, 0],           // 버튼이 눌려 들어가 보이는 남은 시간
   };
   const kinds = () => { const s = sortStage(g.correct); return [...s.sides[0], ...s.sides[1]]; };
   const newAnimal = () => { const k = kinds(); return k[Math.floor(rng() * k.length)]; };
@@ -45,6 +46,7 @@ function createSort(rng = Math.random) {
 
   g.input = (dir) => {           // dir: 0 = 왼쪽, 1 = 오른쪽
     if (g.over || g.stun > 0) return null;
+    g.press[dir] = 0.1;
     const front = g.queue[0];
     if (sides()[dir].includes(front)) {
       g.queue.shift();
@@ -88,6 +90,7 @@ function createSort(rng = Math.random) {
     g.popups = g.popups.filter((p) => p.t < 0.7);
     g.shake = Math.max(0, g.shake - dt);
     g.stageBanner = Math.max(0, g.stageBanner - dt);
+    g.press = g.press.map((p) => Math.max(0, p - dt));
     if (g.over) return;
     g.time -= dt;
     g.stun = Math.max(0, g.stun - dt);
@@ -112,10 +115,12 @@ function createSort(rng = Math.random) {
   return g;
 }
 
-// ---------- 이쪽저쪽 그리기 ----------
-const BIN_Y = 410, FRONT_Y = 420, BTN_Y = 540;
+// ---------- 공통 그리기 도구 (스티커 느낌: 진한 테두리 + 아래로 떨어진 그림자) ----------
+const INK = '#2b1d52';
+const FONT = '"Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 
 function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -125,154 +130,202 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// 테두리 두른 판. lift 만큼 아래로 진한 그림자가 깔린다
+function panel(ctx, x, y, w, h, r, fill, lift = 5, line = 3) {
+  if (lift) { ctx.fillStyle = INK; roundRect(ctx, x, y + lift, w, h, r); ctx.fill(); }
+  ctx.fillStyle = fill;
+  roundRect(ctx, x, y, w, h, r); ctx.fill();
+  ctx.lineWidth = line;
+  ctx.strokeStyle = INK;
+  roundRect(ctx, x, y, w, h, r); ctx.stroke();
+}
+
+// 테두리 두른 글자
+function label(ctx, text, x, y, size, fill = '#fff', align = 'center', stroke = INK) {
+  ctx.font = `${size}px ${FONT}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  if (stroke) { ctx.lineWidth = Math.max(3, size * 0.2); ctx.strokeStyle = stroke; ctx.strokeText(text, x, y); }
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y);
+}
+
 function emoji(ctx, e, x, y, size, alpha = 1) {
   ctx.globalAlpha = alpha;
   ctx.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(e, x, y);
+  ctx.fillText(e, x, y + size * 0.06);
   ctx.globalAlpha = 1;
 }
 
-// 모든 종목이 같이 쓰는 배경·점수·콤보·시간·피버 게이지
-function drawHud(ctx, g, totalTime, feverTime) {
+// 동물 토큰: 흰 동그라미에 테두리
+function token(ctx, e, x, y, r, alpha = 1) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = INK;
+  ctx.beginPath(); ctx.arc(x, y + r * 0.12, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = Math.max(2, r * 0.09);
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  emoji(ctx, e, x, y, r * 1.25, alpha);
+}
+
+// 배경: 진한 하늘빛 그라디언트 + 사선 줄무늬 + 떠다니는 방울. 피버 땐 분홍·주황으로 일렁인다
+const BUBBLES = Array.from({ length: 9 }, (_, i) => ({ x: (i * 97) % W, r: 18 + (i * 37) % 40, s: 8 + (i % 4) * 5, o: i * 71 }));
+function drawBackground(ctx, fever = 0) {
   const now = performance.now() / 1000;
-  // 배경: 피버 때는 무지개빛으로 일렁인다
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  if (g.fever > 0) {
-    const h = (now * 120) % 360;
-    bg.addColorStop(0, `hsl(${h},90%,85%)`);
-    bg.addColorStop(1, `hsl(${(h + 60) % 360},90%,75%)`);
+  if (fever > 0) {
+    const h = (now * 90) % 360;
+    bg.addColorStop(0, `hsl(${(h + 320) % 360},95%,62%)`);
+    bg.addColorStop(1, `hsl(${(h + 20) % 360},95%,58%)`);
   } else {
-    bg.addColorStop(0, '#fff8e1');
-    bg.addColorStop(1, '#ffe0a3');
+    bg.addColorStop(0, '#39c8ff');
+    bg.addColorStop(1, '#6b5cff');
   }
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
-
-  // 위: 점수 · 콤보 · 시간 · 피버
-  ctx.fillStyle = '#4a2a08';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = '900 30px sans-serif';
-  ctx.fillText(g.score.toLocaleString(), 18, 46);
-  if (g.combo >= 3) {
-    ctx.font = '900 16px sans-serif';
-    ctx.fillStyle = '#ff5a36';
-    ctx.fillText(`${g.combo} 콤보`, 20, 68);
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(-Math.PI / 6);
+  ctx.fillStyle = 'rgba(255,255,255,.07)';
+  const off = (now * 12) % 56;
+  for (let x = -H; x < H; x += 56) ctx.fillRect(x + off, -H, 26, H * 2);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,.12)';
+  for (const b of BUBBLES) {
+    const y = H + 60 - ((now * b.s + b.o * 3) % (H + 120));
+    ctx.beginPath(); ctx.arc(b.x + Math.sin(now + b.o) * 10, y, b.r, 0, Math.PI * 2); ctx.fill();
   }
-  const tw = W - 36;
-  ctx.fillStyle = 'rgba(120,60,0,.15)';
-  roundRect(ctx, 18, 82, tw, 14, 7); ctx.fill();
-  const tr = Math.max(0, g.time / totalTime);
-  ctx.fillStyle = g.time < 10 ? '#ff4d4d' : '#4cc36b';
-  roundRect(ctx, 18, 82, Math.max(14, tw * tr), 14, 7); ctx.fill();
-  // 남은 초는 막대 안에 (오른쪽 위는 소리·일시정지 버튼 자리)
-  ctx.fillStyle = '#fff';
-  ctx.font = '900 11px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`${Math.ceil(g.time)}초`, 18 + Math.max(14, tw * tr) / 2, 89);
-  ctx.textBaseline = 'alphabetic';
-
-  ctx.fillStyle = 'rgba(120,60,0,.12)';
-  roundRect(ctx, 18, 102, tw, 8, 4); ctx.fill();
-  ctx.fillStyle = g.fever > 0 ? '#ff5acd' : '#ffb000';
-  roundRect(ctx, 18, 102, Math.max(8, tw * (g.fever > 0 ? g.fever / feverTime : g.gauge)), 8, 4); ctx.fill();
-  if (g.fever > 0) {
-    ctx.textAlign = 'center';
-    ctx.font = '900 18px sans-serif';
-    ctx.fillStyle = '#ff2fa0';
-    ctx.fillText('FEVER ×2', W / 2, 136);
-  }
-
 }
+
+// 모든 종목이 같이 쓰는 점수·콤보·시간·피버
+function drawHud(ctx, g, totalTime, feverTime) {
+  const now = performance.now() / 1000;
+  drawBackground(ctx, g.fever);
+
+  // 점수 배지
+  panel(ctx, 14, 14, 164, 46, 23, '#ffd23f');
+  emoji(ctx, '⭐', 38, 37, 24);
+  label(ctx, g.score.toLocaleString(), 106, 37, 28, '#fff');
+
+  // 시간
+  const tw = W - 28;
+  panel(ctx, 14, 74, tw, 28, 14, '#ffffff', 4);
+  const tr = Math.max(0, g.time / totalTime);
+  const low = g.time < 10;
+  const tg = ctx.createLinearGradient(0, 78, 0, 98);
+  tg.addColorStop(0, low ? '#ff8a8a' : '#7dffb0');
+  tg.addColorStop(1, low ? '#ff3b5c' : '#1fc46b');
+  ctx.fillStyle = tg;
+  roundRect(ctx, 18, 78, Math.max(20, (tw - 8) * tr), 20, 10); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.45)';
+  roundRect(ctx, 24, 80, Math.max(8, (tw - 8) * tr - 12), 5, 3); ctx.fill();
+  emoji(ctx, '⏰', 30, 88, 24);
+  label(ctx, `${Math.ceil(g.time)}`, W - 30, 88, 18, low && Math.sin(now * 12) > 0 ? '#ff3b5c' : '#fff', 'right');
+
+  // 피버 게이지
+  panel(ctx, 14, 112, tw, 18, 9, '#ffffff', 3);
+  const fr = g.fever > 0 ? g.fever / feverTime : g.gauge;
+  const fg = ctx.createLinearGradient(18, 0, 18 + tw, 0);
+  fg.addColorStop(0, '#ff7ac8');
+  fg.addColorStop(1, '#ff3d8b');
+  ctx.fillStyle = fg;
+  roundRect(ctx, 17, 115, Math.max(12, (tw - 6) * fr), 12, 6); ctx.fill();
+  label(ctx, g.fever > 0 ? '🔥 FEVER' : 'FEVER', 26, 121, 11, '#fff', 'left');
+  // 막대 아래 줄: 가운데 FEVER, 오른쪽 콤보 (오른쪽 위는 소리·일시정지 버튼 자리라 비워 둔다)
+  if (g.fever > 0) {
+    const s = 1 + Math.sin(now * 10) * 0.06;
+    ctx.save();
+    ctx.translate(W / 2, 152);
+    ctx.scale(s, s);
+    label(ctx, 'FEVER ×2', 0, 0, 24, '#fff54f');
+    ctx.restore();
+  }
+  if (g.combo >= 3) label(ctx, `${g.combo} 콤보!`, W - 16, 152, 20, '#ff9ad0', 'right');
+}
+
+// ---------- 이쪽저쪽 그리기 ----------
+const BIN_Y = 330, FRONT_Y = 420, BTN_Y = 520;
+const SIDE_COLOR = ['#ff9a3c', '#3fa9ff'];
 
 function drawSort(ctx, g) {
   const now = performance.now() / 1000;
   drawHud(ctx, g, SORT.TIME, SORT.FEVER_TIME);
 
+  // 가운데 줄: 반투명 트랙 위에 동물들이 줄 서 있다
+  ctx.fillStyle = 'rgba(255,255,255,.22)';
+  roundRect(ctx, W / 2 - 46, 180, 92, 290, 46); ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(43,29,82,.35)'; ctx.stroke();
+
   // 양쪽 편
   const sides = g.sides();
-  const warn = g.swapWarn > 0 && Math.sin(now * 20) > 0;
+  const warn = g.swapWarn > 0 && Math.sin(now * 22) > 0;
   for (let d = 0; d < 2; d++) {
-    const x = d ? W - 118 : 18;
-    ctx.fillStyle = warn ? '#ffd1d1' : '#ffffff';
-    roundRect(ctx, x, BIN_Y - 70, 100, 140, 22); ctx.fill();
-    ctx.strokeStyle = warn ? '#ff4d4d' : d ? '#5aa9ff' : '#ff8a3d';
-    ctx.lineWidth = 4;
-    ctx.stroke();
+    const x = d ? W - 132 : 14, w = 118;
+    panel(ctx, x, BIN_Y - 100, w, 200, 24, warn ? '#ff5a6e' : SIDE_COLOR[d]);
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    roundRect(ctx, x + 10, BIN_Y - 58, w - 20, 146, 16); ctx.fill();
+    label(ctx, d ? '저쪽 ▶' : '◀ 이쪽', x + w / 2, BIN_Y - 78, 20, '#fff');
     const list = sides[d];
-    list.forEach((a, i) => emoji(ctx, SORT.ANIMALS[a], x + 50, BIN_Y - (list.length - 1) * 26 + i * 52, list.length > 1 ? 40 : 54));
-    ctx.fillStyle = d ? '#2f7fd9' : '#e0661a';
-    ctx.font = '900 14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(d ? '저쪽 →' : '← 이쪽', x + 50, BIN_Y + 92);
+    list.forEach((a, i) => token(ctx, SORT.ANIMALS[a], x + w / 2, BIN_Y + 15 - (list.length - 1) * 34 + i * 68, list.length > 1 ? 28 : 38));
   }
   if (g.swapWarn > 0) {
-    ctx.font = '900 22px sans-serif';
-    ctx.fillStyle = '#ff3b3b';
-    ctx.textAlign = 'center';
-    ctx.fillText('편이 바뀌어요!', W / 2, 180);
+    panel(ctx, W / 2 - 90, 182, 180, 40, 20, '#ff3b5c', 4);
+    label(ctx, '⇄ 편이 바뀐다!', W / 2, 202, 20, '#fff');
   }
 
-  // 가운데 줄: 맨 앞이 아래, 뒤로 갈수록 작고 흐리게
+  // 줄 선 동물: 맨 앞은 크게, 뒤로 갈수록 작게
   const sx = g.shake > 0 ? Math.sin(g.shake * 80) * 8 : 0;
-  for (let i = g.queue.length - 1; i >= 0; i--) {
-    const y = FRONT_Y - i * 44 - (i ? 30 : 0);
-    const size = i ? 44 - i * 3 : 76;
-    emoji(ctx, SORT.ANIMALS[g.queue[i]], W / 2 + (i ? 0 : sx), y, size, i ? 0.85 - i * 0.1 : 1);
+  for (let i = g.queue.length - 1; i >= 1; i--) {
+    token(ctx, SORT.ANIMALS[g.queue[i]], W / 2, FRONT_Y - 48 - i * 36, 25 - i * 1.5, 1 - i * 0.08);
   }
+  // 맨 앞: 노란 빛 고리
+  const glow = 50 + Math.sin(now * 6) * 3;
+  ctx.fillStyle = 'rgba(255,230,80,.55)';
+  ctx.beginPath(); ctx.arc(W / 2 + sx, FRONT_Y, glow, 0, Math.PI * 2); ctx.fill();
+  token(ctx, SORT.ANIMALS[g.queue[0]], W / 2 + sx, FRONT_Y, 42);
   if (g.stun > 0) {
-    ctx.strokeStyle = '#ff3b3b';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(W / 2 - 26, FRONT_Y - 26); ctx.lineTo(W / 2 + 26, FRONT_Y + 26);
-    ctx.moveTo(W / 2 + 26, FRONT_Y - 26); ctx.lineTo(W / 2 - 26, FRONT_Y + 26);
-    ctx.stroke();
+    ctx.lineCap = 'round';
+    for (const [lw, col] of [[14, INK], [8, '#ff3b5c']]) {
+      ctx.lineWidth = lw; ctx.strokeStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 24, FRONT_Y - 24); ctx.lineTo(W / 2 + 24, FRONT_Y + 24);
+      ctx.moveTo(W / 2 + 24, FRONT_Y - 24); ctx.lineTo(W / 2 - 24, FRONT_Y + 24);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
   }
 
   // 편으로 날아가는 동물
   for (const f of g.flying) {
     const k = f.t / 0.25;
-    const tx = f.dir ? W - 68 : 68;
-    const x = W / 2 + (tx - W / 2) * k, y = FRONT_Y - Math.sin(k * Math.PI) * 60;
-    emoji(ctx, SORT.ANIMALS[f.a], x, y, 76 - k * 30, 1 - k * 0.5);
+    const tx = f.dir ? W - 73 : 73;
+    token(ctx, SORT.ANIMALS[f.a], W / 2 + (tx - W / 2) * k, FRONT_Y - Math.sin(k * Math.PI) * 70 - k * 60, 42 - k * 16, 1 - k * 0.4);
   }
   for (const p of g.popups) {
     ctx.globalAlpha = Math.min(1, (0.7 - p.t) * 3);
-    ctx.font = '900 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = p.bad ? '#ff3b3b' : '#ff7a1a';
-    ctx.fillText(p.text, p.dir ? W - 68 : 68, BIN_Y - 90 - p.t * 40);
+    label(ctx, p.text, p.dir ? W - 73 : 73, BIN_Y - 120 - p.t * 40, 24, p.bad ? '#ff3b5c' : '#fff54f');
     ctx.globalAlpha = 1;
   }
 
-  // 아래 버튼 (화면 왼쪽·오른쪽 아무 데나 눌러도 된다)
+  // 아래 버튼 (화면 왼쪽·오른쪽 아무 데나 눌러도 된다). 누르면 쑥 들어간다
   for (let d = 0; d < 2; d++) {
-    const x = d ? W / 2 + 6 : 18;
-    ctx.fillStyle = d ? '#5aa9ff' : '#ff8a3d';
-    roundRect(ctx, x, BTN_Y, W / 2 - 24, 78, 22); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,.12)';
-    roundRect(ctx, x, BTN_Y + 70, W / 2 - 24, 8, 4); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = '900 34px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(d ? '▶' : '◀', x + (W / 2 - 24) / 2, BTN_Y + 38);
+    const x = d ? W / 2 + 6 : 14, w = W / 2 - 20;
+    const down = g.press && g.press[d] > 0 ? 4 : 0;
+    panel(ctx, x, BTN_Y + down, w, 84, 26, SIDE_COLOR[d], 7 - down, 3);
+    ctx.fillStyle = 'rgba(255,255,255,.3)';
+    roundRect(ctx, x + 12, BTN_Y + down + 8, w - 24, 12, 6); ctx.fill();
+    label(ctx, d ? '▶' : '◀', x + w / 2, BTN_Y + down + 44, 40, '#fff');
   }
 
   if (g.stageBanner > 0) {
     ctx.globalAlpha = Math.min(1, g.stageBanner * 2);
-    ctx.font = '900 30px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#fff';
-    const msg = g.stageN === 4 ? '이제 편이 바뀌어요!' : '새 친구 등장!';
-    ctx.strokeText(msg, W / 2, 220);
-    ctx.fillStyle = '#ff5a36';
-    ctx.fillText(msg, W / 2, 220);
+    label(ctx, g.stageN === 4 ? '이제 편이 바뀌어요!' : '새 친구 등장!', W / 2, 250, 30, '#fff54f');
     ctx.globalAlpha = 1;
   }
 }
@@ -290,11 +343,11 @@ const STACK = {
   RAINBOW: 0.05,           // 🌈 블록: 바로 아래 블록 색이 된다
   // 색마다 모양을 달리해 색을 구분하기 어려워도 알아볼 수 있게
   COLORS: [
-    { fill: '#ff6b6b', dark: '#c73a3a', mark: '●' },
-    { fill: '#4dabf7', dark: '#1c7ed6', mark: '▲' },
-    { fill: '#51cf66', dark: '#2b9a3e', mark: '■' },
-    { fill: '#ffd43b', dark: '#e0a800', mark: '★' },
-    { fill: '#cc5de8', dark: '#9c36b5', mark: '♥' },
+    { light: '#ffa3b5', fill: '#ff4d6d', dark: '#c9184a', mark: '●' },
+    { light: '#a8dcff', fill: '#3fa9ff', dark: '#1c6fd1', mark: '▲' },
+    { light: '#a3f0c6', fill: '#2fd480', dark: '#12965a', mark: '■' },
+    { light: '#fff0a8', fill: '#ffc93c', dark: '#e08a00', mark: '★' },
+    { light: '#e6c9ff', fill: '#b56cff', dark: '#7b2fd1', mark: '♥' },
   ],
 };
 const RAINBOW = -1;
@@ -313,6 +366,7 @@ function createStack(rng = Math.random) {
     gauge: 0, fever: 0, over: false, sinceClear: 0,
     cols: [[], [], []], cur: 0, next: 0, fall: 0, fallTime: 3,
     drops: [], pops: [], popups: [], shakeCol: -1, shake: 0, levelColors: 3, banner: 0,
+    press: [0, 0, 0],
   };
   const newBlock = () => {
     if (rng() < STACK.RAINBOW) return RAINBOW;
@@ -373,7 +427,11 @@ function createStack(rng = Math.random) {
     return 'ok';
   }
 
-  g.input = (c) => (g.over ? null : place(c));
+  g.input = (c) => {
+    if (g.over) return null;
+    g.press[c] = 0.1;
+    return place(c);
+  };
 
   g.update = (dt) => {
     for (const d of g.drops) d.t += dt;
@@ -384,6 +442,7 @@ function createStack(rng = Math.random) {
     g.popups = g.popups.filter((p) => p.t < 0.8);
     g.shake = Math.max(0, g.shake - dt);
     g.banner = Math.max(0, g.banner - dt);
+    g.press = g.press.map((p) => Math.max(0, p - dt));
     if (g.over) return null;
     g.time -= dt;
     g.fever = Math.max(0, g.fever - dt);
@@ -408,108 +467,147 @@ function createStack(rng = Math.random) {
 }
 
 // ---------- 세 줄 쌓기 그리기 ----------
-const ST = { colW: 104, gap: 16, blockH: 40, floor: 600 };
+const ST = { colW: 108, gap: 12, blockH: 42, floor: 596 };
 ST.left = (W - ST.colW * 3 - ST.gap * 2) / 2;
 ST.x = (c) => ST.left + c * (ST.colW + ST.gap);
 ST.y = (i) => ST.floor - (i + 1) * ST.blockH;            // i 번째 칸의 윗변
+const DROP_TOP = 176;                                     // 내려오는 블록이 시작하는 높이 (FEVER 글자 아래)
+const dropY = (k) => DROP_TOP + (ST.y(STACK.CAP - 1) - 54 - DROP_TOP) * k;
 
+// 젤리 블록: 진한 테두리, 위는 밝고 아래는 진한 그라디언트, 윗부분 광택, 가운데 흰 기호
 function drawBlock(ctx, color, x, y, w, h, alpha = 1) {
   ctx.globalAlpha = alpha;
+  const r = 12;
+  ctx.fillStyle = INK;
+  roundRect(ctx, x + 3, y + 5, w - 6, h - 4, r); ctx.fill();
+  let fill;
   if (color === RAINBOW) {
-    const gr = ctx.createLinearGradient(x, y, x + w, y);
-    ['#ff6b6b', '#ffd43b', '#51cf66', '#4dabf7', '#cc5de8'].forEach((c, i) => gr.addColorStop(i / 4, c));
-    ctx.fillStyle = gr;
-  } else ctx.fillStyle = STACK.COLORS[color].fill;
-  roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 10); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.35)';
-  roundRect(ctx, x + 8, y + 5, w - 16, 7, 4); ctx.fill();
-  ctx.fillStyle = color === RAINBOW ? '#fff' : STACK.COLORS[color].dark;
-  ctx.font = '900 18px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(color === RAINBOW ? '🌈' : STACK.COLORS[color].mark, x + w / 2, y + h / 2 + 2);
+    fill = ctx.createLinearGradient(x, y, x + w, y + h);
+    ['#ff4d6d', '#ffc93c', '#2fd480', '#3fa9ff', '#b56cff'].forEach((c, i) => fill.addColorStop(i / 4, c));
+  } else {
+    const c = STACK.COLORS[color];
+    fill = ctx.createLinearGradient(0, y, 0, y + h);
+    fill.addColorStop(0, c.light);
+    fill.addColorStop(0.45, c.fill);
+    fill.addColorStop(1, c.dark);
+  }
+  ctx.fillStyle = fill;
+  roundRect(ctx, x + 3, y + 2, w - 6, h - 5, r); ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = INK;
+  roundRect(ctx, x + 3, y + 2, w - 6, h - 5, r); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  roundRect(ctx, x + 11, y + 6, w - 40, 7, 4); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w - 20, y + 10, 3, 0, Math.PI * 2); ctx.fill();
+  if (color === RAINBOW) emoji(ctx, '🌈', x + w / 2, y + h / 2, 22, alpha);
+  else label(ctx, STACK.COLORS[color].mark, x + w / 2, y + h / 2 + 1, 20, '#fff');
   ctx.globalAlpha = 1;
 }
 
 function drawStack(ctx, g) {
   drawHud(ctx, g, STACK.TIME, STACK.FEVER_TIME);
   const now = performance.now() / 1000;
+  const tubeTop = ST.y(STACK.CAP - 1) - 10;
 
-  // 줄(선반)
+  // 유리관 세 개
   for (let c = 0; c < 3; c++) {
     const x = ST.x(c) + (g.shake > 0 && g.shakeCol === c ? Math.sin(g.shake * 90) * 6 : 0);
-    const full = g.cols[c].length >= STACK.CAP;
-    ctx.fillStyle = full && Math.sin(now * 12) > 0 ? 'rgba(255,90,90,.25)' : 'rgba(120,60,0,.08)';
-    roundRect(ctx, x, ST.y(STACK.CAP - 1) - 4, ST.colW, ST.blockH * STACK.CAP + 8, 14); ctx.fill();
+    const n = g.cols[c].length;
+    const danger = n >= STACK.CAP - 1;
+    ctx.fillStyle = INK;
+    roundRect(ctx, x - 4, tubeTop + 6, ST.colW + 8, ST.floor - tubeTop + 10, 20); ctx.fill();
+    // 속은 밝고 불투명하게 (반투명이면 아래 그림자가 비쳐 어두워진다)
+    const inner = ctx.createLinearGradient(0, tubeTop, 0, ST.floor);
+    const flash = danger && Math.sin(now * 12) > 0;
+    inner.addColorStop(0, flash ? '#ffd0da' : '#f6f3ff');
+    inner.addColorStop(1, flash ? '#ffb3c4' : '#ddd5ff');
+    ctx.fillStyle = inner;
+    roundRect(ctx, x - 4, tubeTop, ST.colW + 8, ST.floor - tubeTop + 10, 20); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    roundRect(ctx, x + 4, tubeTop + 12, 6, ST.floor - tubeTop - 30, 3); ctx.fill();
+    // 넘치기 직전 줄: 위쪽에 경고 띠
+    if (danger) {
+      ctx.save();
+      roundRect(ctx, x - 2, tubeTop + 2, ST.colW + 4, 14, 7); ctx.clip();
+      for (let k = -1; k < 8; k++) {
+        ctx.fillStyle = k % 2 ? '#ffd23f' : INK;
+        ctx.beginPath();
+        ctx.moveTo(x + k * 16 + (now * 30) % 32, tubeTop + 2);
+        ctx.lineTo(x + k * 16 + 16 + (now * 30) % 32, tubeTop + 2);
+        ctx.lineTo(x + k * 16 + (now * 30) % 32, tubeTop + 16);
+        ctx.lineTo(x + k * 16 - 16 + (now * 30) % 32, tubeTop + 16);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
     g.cols[c].forEach((color, i) => drawBlock(ctx, color, x, ST.y(i), ST.colW, ST.blockH));
-    ctx.fillStyle = 'rgba(120,60,0,.35)';
-    ctx.font = '900 13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(['← / A', '↓ / S', '→ / D'][c], x + ST.colW / 2, ST.floor + 26);
+    // 아래 키 표시
+    const down = g.press && g.press[c] > 0 ? 3 : 0;
+    panel(ctx, x + ST.colW / 2 - 26, ST.floor + 20 + down, 52, 22, 11, '#ffffff', 4 - down, 2.5);
+    label(ctx, ['◀ A', '▼ S', 'D ▶'][c], x + ST.colW / 2, ST.floor + 31 + down, 13, INK, 'center', null);
   }
 
-  // 막 놓인 블록은 위에서 툭 떨어지듯
+  // 막 놓인 블록: 떨어지던 자리에서 툭
   for (const d of g.drops) {
     const k = d.t / 0.12, col = g.cols[d.c];
     const toY = ST.y(Math.max(0, col.length - 1));
-    const fromY = 150 + (ST.y(STACK.CAP - 1) - 50 - 150) * d.from;   // 떨어지던 그 자리에서
-    ctx.globalAlpha = 0.5;
-    drawBlock(ctx, d.color, ST.x(d.c), fromY + (toY - fromY) * k, ST.colW, ST.blockH, 0.5);
-    ctx.globalAlpha = 1;
+    const fromY = dropY(d.from);
+    drawBlock(ctx, d.color, ST.x(d.c), fromY + (toY - fromY) * k, ST.colW, ST.blockH, 0.6);
   }
+  // 없어지는 블록: 부풀며 사라지고 별이 튄다
   for (const p of g.pops) {
-    const k = p.t / 0.4, s = 1 + k * 0.6;
+    const k = p.t / 0.4, s = 1 + k * 0.5;
     const cx = ST.x(p.c) + ST.colW / 2, cy = ST.y(p.i) + ST.blockH / 2;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(s, s);
     drawBlock(ctx, p.color, -ST.colW / 2, -ST.blockH / 2, ST.colW, ST.blockH, 1 - k);
     ctx.restore();
+    for (let j = 0; j < 4; j++) {
+      const a = j * 1.57 + p.i;
+      emoji(ctx, '✨', cx + Math.cos(a) * (20 + k * 60), cy + Math.sin(a) * (10 + k * 40), 16, 1 - k);
+    }
   }
 
-  // 내려오는 블록: 위에서 선반 윗선까지. 가운데 줄 위에 그리고, 남은 시간을 막대로 보여준다
+  // 내려오는 블록 + 떨어질 자리 안내선 + 남은 시간
   if (!g.over) {
     const k = Math.min(1, g.fall / g.fallTime);
-    const y = 150 + (ST.y(STACK.CAP - 1) - 50 - 150) * k;   // FEVER 글자(136) 아래에서 시작
-    drawBlock(ctx, g.cur, ST.x(1), y, ST.colW, ST.blockH);
-    ctx.fillStyle = 'rgba(120,60,0,.15)';
-    roundRect(ctx, ST.x(1), y + ST.blockH + 3, ST.colW, 5, 3); ctx.fill();
-    ctx.fillStyle = k > 0.7 ? '#ff4d4d' : '#ff9f43';
-    roundRect(ctx, ST.x(1), y + ST.blockH + 3, ST.colW * (1 - k), 5, 3); ctx.fill();
-    // 다음 블록
-    ctx.fillStyle = 'rgba(120,60,0,.5)';
-    ctx.font = '800 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('다음', ST.x(2) + ST.colW / 2, 152);
-    drawBlock(ctx, g.next, ST.x(2) + 22, 158, ST.colW - 44, 30, 0.8);
+    const y = dropY(k);
+    const x = ST.x(1);
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,.55)';
+    ctx.beginPath(); ctx.moveTo(x + ST.colW / 2, y + ST.blockH + 12); ctx.lineTo(x + ST.colW / 2, tubeTop); ctx.stroke();
+    ctx.setLineDash([]);
+    drawBlock(ctx, g.cur, x, y, ST.colW, ST.blockH);
+    panel(ctx, x + 10, y + ST.blockH + 4, ST.colW - 20, 10, 5, '#ffffff', 2, 2);
+    ctx.fillStyle = k > 0.7 ? '#ff3b5c' : '#ffb000';
+    roundRect(ctx, x + 12, y + ST.blockH + 6, (ST.colW - 24) * (1 - k), 6, 3); ctx.fill();
+
+    // 다음 블록 말풍선
+    const nx = ST.x(2) + 8, ny = DROP_TOP - 4;
+    panel(ctx, nx, ny, ST.colW - 16, 66, 16, '#ffffff', 4);
+    label(ctx, 'NEXT', nx + (ST.colW - 16) / 2, ny + 13, 13, INK, 'center', null);
+    drawBlock(ctx, g.next, nx + 10, ny + 22, ST.colW - 36, 36);
   }
 
   for (const p of g.popups) {
     ctx.globalAlpha = Math.min(1, (0.8 - p.t) * 3);
-    ctx.font = '900 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = p.bad ? '#ff3b3b' : '#ff7a1a';
-    ctx.fillText(p.text, ST.x(p.c) + ST.colW / 2, ST.y(Math.max(0, g.cols[p.c].length)) - 16 - p.t * 40);
+    label(ctx, p.text, ST.x(p.c) + ST.colW / 2, ST.y(Math.max(0, g.cols[p.c].length)) - 20 - p.t * 40, p.bad ? 20 : 26, p.bad ? '#ff3b5c' : '#fff54f');
     ctx.globalAlpha = 1;
   }
   if (g.banner > 0) {
     ctx.globalAlpha = Math.min(1, g.banner * 2);
-    ctx.font = '900 28px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#fff';
-    ctx.strokeText('새 색깔 추가!', W / 2, 250);
-    ctx.fillStyle = '#ff5a36';
-    ctx.fillText('새 색깔 추가!', W / 2, 250);
+    label(ctx, '새 색깔 추가!', W / 2, 250, 32, '#fff54f');
     ctx.globalAlpha = 1;
   }
 }
 
 const GAMES = [
-  { id: 'sort', title: '이쪽저쪽', icon: '🐱🐶', desc: '가운데 친구를 자기 편으로 보내요', create: createSort,
+  { id: 'sort', title: '이쪽저쪽', icon: '🐱🐶', color: '#ffd23f', desc: '가운데 친구를 자기 편으로 보내요', create: createSort,
     help: '맨 앞 동물이 있는 편을 누르세요<br>⌨️ ← → · 📱 화면 왼쪽/오른쪽 탭<br>틀리면 1초 감점, 콤보를 모으면 FEVER!' },
-  { id: 'stack', title: '세 줄 쌓기', icon: '🟥🟦', desc: '같은 색 3개를 쌓아서 없애요', create: createStack,
+  { id: 'stack', title: '세 줄 쌓기', icon: '🟥🟦', color: '#a8dcff', desc: '같은 색 3개를 쌓아서 없애요', create: createStack,
     help: '내려오는 블록을 세 줄 중 하나에 쌓으세요<br>맨 위 3개가 같은 색이면 사라져요 · 🌈는 아래 색이 돼요<br>⌨️ ← ↓ → (A S D) · 📱 줄을 탭<br>꾸물거리면 가운데로 떨어지고, 넘치면 5초 감점!' },
 ];
 
@@ -524,7 +622,7 @@ const ctx = canvas.getContext('2d');
 const $ = (id) => document.getElementById(id);
 
 function fit() {
-  const scale = Math.min((innerWidth - 16) / W, (innerHeight - 16) / H);
+  const scale = Math.min((innerWidth - 28) / W, (innerHeight - 40) / H);   // 테두리·아래 그림자 자리
   const cssW = Math.floor(W * scale), cssH = Math.floor(H * scale);
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = cssW + 'px';
@@ -592,15 +690,14 @@ function showMenu() {
   state = 'menu';
   game = null;
   showOverlay(`
-    <h1>손가락 운동회</h1>
-    <p>짧고 빠른 미니게임 모음</p>
+    <h1 class="inked">손가락<br><span class="y">운동회</span></h1>
+    <span class="tag">짧고 빠른 미니게임 모음</span>
     <div class="cards">
       ${GAMES.map((g) => `<button class="card" data-game="${g.id}">
-        <span class="ico">${g.icon}</span>
-        <span><b>${g.title}</b><small>${g.desc}</small></span>
-        <span class="best">${bestOf(g.id) ? `🏆 ${bestOf(g.id).toLocaleString()}` : ''}</span>
+        <span class="ico" style="background:${g.color}">${g.icon}</span>
+        <span class="txt"><b>${g.title}</b><small>${g.desc}</small><span class="best">${bestOf(g.id) ? `🏆 ${bestOf(g.id).toLocaleString()}` : ''}</span></span>
       </button>`).join('')}
-      <div class="card soon"><span class="ico">🎁</span><span><b>다음 종목 준비 중</b><small>곧 더 많은 게임이 추가돼요</small></span><span></span></div>
+      <div class="card soon"><span class="ico">🎁</span><span class="txt"><b>다음 종목 준비 중</b><small>곧 더 많은 게임이 추가돼요</small></span></div>
     </div>`);
 }
 
@@ -608,10 +705,10 @@ function showIntro(g) {
   current = g;
   state = 'menu';
   showOverlay(`
-    <div style="font-size:56px">${g.icon}</div>
-    <h2>${g.title}</h2>
-    <p class="help">${g.help}</p>
-    <span class="record">${bestOf(g.id) ? `최고 기록 ${bestOf(g.id).toLocaleString()}` : ''}</span>
+    <div class="icon-big" style="background:${g.color}">${g.icon}</div>
+    <h2 class="inked">${g.title}</h2>
+    <div class="help">${g.help}</div>
+    ${bestOf(g.id) ? `<span class="tag">🏆 최고 기록 ${bestOf(g.id).toLocaleString()}</span>` : ''}
     <button class="main" data-act="start">시작!</button>
     <button class="sub" data-act="menu">← 종목 고르기</button>`);
 }
@@ -630,9 +727,9 @@ function finish() {
   const s = game.stats();
   const isBest = saveBest(current.id, s.score);
   setTimeout(() => showOverlay(`
-    <h2>끝!</h2>
-    <div class="big">${s.score.toLocaleString()}</div>
-    <span class="record">${isBest ? '🏆 최고 기록!' : `최고 기록 ${bestOf(current.id).toLocaleString()}`}</span>
+    <h2 class="inked">끝!</h2>
+    <div class="big inked">${s.score.toLocaleString()}</div>
+    <span class="tag">${isBest ? '🏆 최고 기록!' : `최고 기록 ${bestOf(current.id).toLocaleString()}`}</span>
     <dl class="stats">${s.lines.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
     <button class="main" data-act="start">한 번 더</button>
     <button class="sub" data-act="menu">← 종목 고르기</button>`), 500);
@@ -641,7 +738,7 @@ function finish() {
 function pause() {
   if (state !== 'play' && state !== 'ready') return;
   state = 'paused';
-  showOverlay(`<h2>일시정지</h2>
+  showOverlay(`<h2 class="inked">일시정지</h2>
     <button class="main" data-act="resume">계속하기</button>
     <button class="sub" data-act="menu">← 그만하고 종목 고르기</button>`);
 }
@@ -680,23 +777,19 @@ function frame(now) {
   if (game) {
     game.draw(ctx);
     if (state === 'ready') {
-      ctx.fillStyle = 'rgba(255,248,225,.6)';
+      // 3, 2, 1: 숫자가 바뀔 때마다 크게 튀어나왔다가 자리 잡는다
+      ctx.fillStyle = 'rgba(43,29,82,.45)';
       ctx.fillRect(0, 0, W, H);
-      ctx.font = '900 96px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = '#fff';
-      ctx.strokeText(Math.ceil(countdown), W / 2, H / 2 - 40);
-      ctx.fillStyle = '#ff7a1a';
-      ctx.fillText(Math.ceil(countdown), W / 2, H / 2 - 40);
+      const frac = countdown % 1, s = 1 + Math.max(0, frac - 0.7) * 2;
+      ctx.save();
+      ctx.translate(W / 2, H / 2 - 30);
+      ctx.scale(s, s);
+      label(ctx, Math.ceil(countdown), 0, 0, 120, '#fff54f');
+      ctx.restore();
+      label(ctx, '준비!', W / 2, H / 2 + 60, 30, '#fff');
     }
   } else {
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#fff8e1');
-    bg.addColorStop(1, '#ffe0a3');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    drawBackground(ctx);
   }
   requestAnimationFrame(frame);
 }
@@ -750,6 +843,7 @@ $('muteBtn').onclick = (e) => { e.currentTarget.blur(); toggleMute(); };
 $('pauseBtn').onclick = (e) => { e.currentTarget.blur(); state === 'paused' ? resume() : pause(); };
 $('muteBtn').textContent = muted ? '🔇' : '🔊';
 
+if (document.fonts) document.fonts.load(`20px ${FONT}`).catch(() => {});
 showMenu();
 fit();
 requestAnimationFrame(frame);
