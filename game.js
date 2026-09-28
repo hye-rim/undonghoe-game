@@ -707,9 +707,9 @@ function showIntro(g) {
   showOverlay(`
     <div class="icon-big" style="background:${g.color}">${g.icon}</div>
     <h2 class="inked">${g.title}</h2>
+    <button class="main" data-act="start">시작!</button>
     <div class="help">${g.help}</div>
     ${bestOf(g.id) ? `<span class="tag">🏆 최고 기록 ${bestOf(g.id).toLocaleString()}</span>` : ''}
-    <button class="main" data-act="start">시작!</button>
     <button class="sub" data-act="menu">← 종목 고르기</button>`);
 }
 

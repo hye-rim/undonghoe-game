@@ -41,6 +41,17 @@
     backdrop-filter:blur(3px);
     border-radius:26px;
     overflow-y:auto;
+    touch-action:pan-y;   /* body 가 touch-action:none 이라 설명이 판보다 길면 스크롤이 막혔다 */
+  }
+  /* 세로가 짧은 폰(로비 안에서 열면 더 짧다): 시작 버튼이 가려지지 않게 촘촘하게 */
+  @media (max-height:700px) {
+    #overlay { gap:9px; padding-top:54px; }
+    #overlay .icon-big { width:72px; height:72px; font-size:30px; border-radius:22px; box-shadow:0 5px 0 var(--ink); }
+    #overlay h2 { font-size:30px; }
+    #overlay .help { font-size:13px; padding:8px 12px; line-height:1.55; }
+    #overlay .main { font-size:21px; padding:9px 38px; margin-top:0; }
+    #overlay .cards { gap:10px; }
+    #overlay .card { padding:9px 12px; }
   }
   #overlay.hidden { display:none; }
   /* 흰 글자 + 진한 테두리 + 아래 그림자: 캔버스 글자와 같은 느낌 */
