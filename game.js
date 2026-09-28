@@ -676,6 +676,11 @@ const sfx = {
   end: () => [784, 659, 523, 392].forEach((f, i) => setTimeout(() => tone(f, 0.2, 'triangle', 0.1), i * 140)),
 };
 
+// 로비에서는 두 종목을 따로 연다: /sort/ 는 이쪽저쪽, /stack/ 은 세 줄 쌓기 (같은 폴더를 두 주소로 서빙).
+// 그렇게 열리면 종목 고르기 메뉴 없이 그 게임만 보여준다. 그 밖의 주소에서는 예전처럼 메뉴부터.
+const ONLY = GAMES.find((g) => new RegExp(`/${g.id}/?$`).test(location.pathname)) || null;
+if (ONLY) document.title = ONLY.title;
+
 // ---------- State ----------
 let state = 'menu';        // menu | ready | play | paused | over
 let current = null;        // GAMES 항목
@@ -689,6 +694,7 @@ const overlayOpen = () => !$('overlay').classList.contains('hidden');
 function showMenu() {
   state = 'menu';
   game = null;
+  if (ONLY) return showIntro(ONLY);
   showOverlay(`
     <h1 class="inked">손가락<br><span class="y">운동회</span></h1>
     <span class="tag">짧고 빠른 미니게임 모음</span>
@@ -710,7 +716,7 @@ function showIntro(g) {
     <button class="main" data-act="start">시작!</button>
     <div class="help">${g.help}</div>
     ${bestOf(g.id) ? `<span class="tag">🏆 최고 기록 ${bestOf(g.id).toLocaleString()}</span>` : ''}
-    <button class="sub" data-act="menu">← 종목 고르기</button>`);
+    ${ONLY ? '' : '<button class="sub" data-act="menu">← 종목 고르기</button>'}`);
 }
 
 function start() {
@@ -732,7 +738,7 @@ function finish() {
     <span class="tag">${isBest ? '🏆 최고 기록!' : `최고 기록 ${bestOf(current.id).toLocaleString()}`}</span>
     <dl class="stats">${s.lines.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
     <button class="main" data-act="start">한 번 더</button>
-    <button class="sub" data-act="menu">← 종목 고르기</button>`), 500);
+    <button class="sub" data-act="menu">${ONLY ? '← 처음으로' : '← 종목 고르기'}</button>`), 500);
 }
 
 function pause() {
@@ -740,7 +746,7 @@ function pause() {
   state = 'paused';
   showOverlay(`<h2 class="inked">일시정지</h2>
     <button class="main" data-act="resume">계속하기</button>
-    <button class="sub" data-act="menu">← 그만하고 종목 고르기</button>`);
+    <button class="sub" data-act="menu">${ONLY ? '← 그만하기' : '← 그만하고 종목 고르기'}</button>`);
 }
 function resume() {
   if (state !== 'paused') return;
