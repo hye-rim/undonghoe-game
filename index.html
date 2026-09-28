@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>손가락 운동회</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html, body {
+    width:100%; height:100%; overflow:hidden;
+    background:radial-gradient(circle at 50% 10%, #fff3c4 0%, #ffd56b 45%, #ff9f43 100%);
+    font-family:-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    color:#4a2a08;
+    touch-action:none;
+  }
+  #stage { width:100%; height:100%; display:flex; align-items:center; justify-content:center; padding:8px; }
+  #wrap { position:relative; }
+  #game { display:block; border-radius:20px; box-shadow:0 0 0 4px #fff8e1, 0 14px 40px rgba(120,60,0,.35); touch-action:none; }
+  #topbar { position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:2; }
+  #topbar button {
+    background:rgba(255,255,255,.75); border:none; color:#6a3a0a;
+    width:34px; height:34px; border-radius:10px; font-size:15px; cursor:pointer;
+    box-shadow:0 2px 0 rgba(120,60,0,.25);
+  }
+  #overlay {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:safe center; gap:12px;
+    text-align:center; padding:22px;
+    background:rgba(255,248,225,.93);
+    border-radius:20px;
+    overflow-y:auto;
+  }
+  #overlay.hidden { display:none; }
+  #overlay h1 { font-size:38px; font-weight:900; color:#ff7a1a; letter-spacing:.02em;
+    text-shadow:0 3px 0 #fff, 0 5px 0 #c85a00; }
+  #overlay h2 { font-size:30px; font-weight:900; }
+  #overlay p { font-size:14px; line-height:1.6; color:#7a4a1c; }
+  #overlay .big { font-size:40px; font-weight:900; color:#ff5a36; font-variant-numeric:tabular-nums; }
+  #overlay .record { font-size:13px; color:#9a6a3c; font-weight:700; }
+  #overlay .cards { display:flex; flex-direction:column; gap:10px; width:100%; max-width:320px; }
+  #overlay .card {
+    display:grid; grid-template-columns:56px 1fr auto; align-items:center; gap:12px; text-align:left;
+    background:#fff; border:none; border-radius:18px; padding:12px 14px; cursor:pointer;
+    box-shadow:0 4px 0 #f0b060; color:#4a2a08; font-family:inherit;
+  }
+  #overlay .card:active { transform:translateY(3px); box-shadow:0 1px 0 #f0b060; }
+  #overlay .card .ico { font-size:26px; white-space:nowrap; text-align:center; }
+  #overlay .card b { font-size:18px; display:block; }
+  #overlay .card small { font-size:12px; color:#9a6a3c; }
+  #overlay .card .best { font-size:12px; font-weight:800; color:#ff7a1a; font-variant-numeric:tabular-nums; }
+  #overlay .card.soon { background:rgba(255,255,255,.5); box-shadow:none; cursor:default; opacity:.7; }
+  #overlay .stats { display:grid; grid-template-columns:auto auto; gap:4px 18px; font-size:15px; font-variant-numeric:tabular-nums; }
+  #overlay .stats dt { color:#9a6a3c; text-align:right; }
+  #overlay .stats dd { font-weight:900; text-align:left; }
+  #overlay .help { font-size:12px; color:#9a6a3c; line-height:1.7; }
+  #overlay .main {
+    margin-top:4px;
+    background:linear-gradient(180deg,#ffb347,#ff7a1a);
+    color:#fff; font-weight:900; font-size:18px;
+    border:none; border-radius:999px; padding:13px 38px;
+    box-shadow:0 4px 0 #c85a00; cursor:pointer; font-family:inherit;
+  }
+  #overlay .main:active { transform:translateY(3px); box-shadow:0 1px 0 #c85a00; }
+  #overlay .sub { background:none; border:none; color:#9a6a3c; font-size:14px; font-weight:800; cursor:pointer; padding:6px; font-family:inherit; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="wrap">
+    <canvas id="game"></canvas>
+    <div id="topbar">
+      <button id="muteBtn" title="소리 (M)">🔊</button>
+      <button id="pauseBtn" title="일시정지 (Esc)">⏸</button>
+    </div>
+    <div id="overlay"></div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
