@@ -621,7 +621,13 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const $ = (id) => document.getElementById(id);
 
-function fit() {
+// 게임 중에 화면 높이만 조금 바뀌는 건(아이폰 사파리 주소창이 접히거나 펴질 때) 무시한다.
+// 그때마다 판 크기를 다시 맞추면 판이 통째로 위아래로 출렁인다. 폭이 바뀌거나(화면 돌림) 게임 밖이면 다시 맞춘다
+let fitW = 0, fitH = 0;
+function fit(force) {
+  const busy = state === 'ready' || state === 'play';
+  if (force !== true && busy && innerWidth === fitW && Math.abs(innerHeight - fitH) < 160) return;
+  fitW = innerWidth; fitH = innerHeight;
   const scale = Math.min((innerWidth - 28) / W, (innerHeight - 40) / H);   // 테두리·아래 그림자 자리
   const cssW = Math.floor(W * scale), cssH = Math.floor(H * scale);
   const dpr = window.devicePixelRatio || 1;
@@ -631,7 +637,7 @@ function fit() {
   canvas.height = Math.round(cssH * dpr);
   ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
 }
-addEventListener('resize', fit);
+addEventListener('resize', () => fit());
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -797,6 +803,8 @@ function frame(now) {
   } else {
     drawBackground(ctx);
   }
+  // 게임 중에 미뤄 둔 화면 크기 변화는 게임 밖에서 반영
+  if (state !== 'ready' && state !== 'play' && (innerWidth !== fitW || innerHeight !== fitH)) fit();
   requestAnimationFrame(frame);
 }
 
