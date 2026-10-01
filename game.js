@@ -630,7 +630,7 @@ function fit(force) {
   fitW = innerWidth; fitH = innerHeight;
   const scale = Math.min((innerWidth - 28) / W, (innerHeight - 40) / H);   // 테두리·아래 그림자 자리
   const cssW = Math.floor(W * scale), cssH = Math.floor(H * scale);
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
   canvas.width = Math.round(cssW * dpr);
