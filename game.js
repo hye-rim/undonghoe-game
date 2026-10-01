@@ -606,9 +606,9 @@ function drawStack(ctx, g) {
 
 const GAMES = [
   { id: 'sort', title: '이쪽저쪽', icon: '🐱🐶', color: '#ffd23f', desc: '가운데 친구를 자기 편으로 보내요', create: createSort,
-    help: '맨 앞 동물이 있는 편을 누르세요<br>⌨️ ← → · 📱 화면 왼쪽/오른쪽 탭<br>틀리면 1초 감점, 콤보를 모으면 FEVER!' },
+    help: '맨 앞 동물이 있는 편을 누르세요<br><span class="pc">⌨️ ← →<br></span><span class="touch">👆 화면 왼쪽/오른쪽 탭<br></span>틀리면 1초 감점, 콤보를 모으면 FEVER!' },
   { id: 'stack', title: '세 줄 쌓기', icon: '🟥🟦', color: '#a8dcff', desc: '같은 색 3개를 쌓아서 없애요', create: createStack,
-    help: '내려오는 블록을 세 줄 중 하나에 쌓으세요<br>맨 위 3개가 같은 색이면 사라져요 · 🌈는 아래 색이 돼요<br>⌨️ ← ↓ → (A S D) · 📱 줄을 탭<br>꾸물거리면 가운데로 떨어지고, 넘치면 5초 감점!' },
+    help: '내려오는 블록을 세 줄 중 하나에 쌓으세요<br>맨 위 3개가 같은 색이면 사라져요 · 🌈는 아래 색이 돼요<br><span class="pc">⌨️ ← ↓ → (A S D)<br></span><span class="touch">👆 쌓을 줄을 탭<br></span>꾸물거리면 가운데로 떨어지고, 넘치면 5초 감점!' },
 ];
 
 if (typeof document === 'undefined') {
