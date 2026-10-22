@@ -1,4 +1,6 @@
 'use strict';
+// 오락실 튜토리얼이 '진짜로 일어난 일'을 알아채는 신호 (arcade/public/tutorial.js 가 듣는다. 튜토리얼이 아니면 아무도 안 듣는다)
+const tutorialSignal = (type) => window.dispatchEvent(new CustomEvent('arcade:tutorial', { detail: { type } }));
 
 // 손가락 운동회: 짧은 미니게임 모음. 게임마다 { id, title, icon, desc, create } 를 GAMES 에 등록한다.
 // 규칙(create() 가 돌려주는 update · input · stats)은 logic.js (LOGIC_UNDONGHOE), 여기서는 그리기를 붙이고 메뉴·루프·입력·기록을 맡는다.
@@ -571,6 +573,7 @@ function frame(now) {
 // 종목마다 누를 칸 수(lanes)가 다르다: 이쪽저쪽 2칸, 세 줄 쌓기 3칸
 function playResult(r) {
   if (!r) return;
+  tutorialSignal(game.lanes === 3 ? 'place' : r === 'ok' ? 'ok' : 'wrong');
   if (game.lanes === 3) {
     if (r === 'clear') sfx.clear(game.combo);
     else if (r === 'burst') sfx.burst();
