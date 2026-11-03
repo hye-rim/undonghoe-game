@@ -488,6 +488,7 @@ function showIntro(g) {
 
 function start() {
   game = current.create();
+  lastFever = 0; lastSwap = false;                  // 이전 판의 상태가 남아 새 판 첫 프레임에 효과음이 울리지 않게
   state = 'ready';
   countdown = 3;
   hideOverlay();
